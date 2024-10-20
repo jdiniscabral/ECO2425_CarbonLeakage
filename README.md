@@ -2,7 +2,7 @@ Programs used to replicate Term Project 1 Kyoto and Carbon Leakage: Anticipation
 
 The two data files used for this project are:
 -	Data_kyotoandleakage_restat.dta, which is obtained directly from the replication package for Aichele and Felbermayr (2015)
--	Carbon_tax_countries_withEU.csv is constructed based on information from the World Bank Carbon Pricing Dashboard. These data can be downloaded directly from: https://carbonpricingdashboard.worldbank.org/
+-	Carbon_tax_countries_withEU.csv is constructed based on information from the World Bank Carbon Pricing Dashboard. These data are publicly available can be downloaded directly from: https://carbonpricingdashboard.worldbank.org/
 - Values identified as having carbon pricing schemes are the ones reporting a positive share of global emissions covered in the compliance_emissions tab between 1995 and 2007. 
 
 
