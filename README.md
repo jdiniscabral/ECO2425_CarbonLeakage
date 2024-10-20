@@ -8,11 +8,15 @@ The two data files used for this project are:
 
 To replicate the main results of the paper, run the following program:
 -	Carbon_Leakage_Paper1_Main.py
--	Note that this code was written based on the Stata replication package for Aichele and Felbermayr (2015)
+-	Note that parts of this code were written based on the Stata replication package for Aichele and Felbermayr (2015)
 
-To replicate the shrinkage and tree-based models used in our variable selection, run the following program:
--	Carbon_Leakage_Paper1_VarSelect.py
--	Note that codes for the shrinkage models and tree-based models are based on codes from (James et al., 2023)
+To replicate the shrinkage models used in our variable selection, run the following program:
+-	Carbon_Leakage_Paper1_Shrinkage.py
+-	Note that codes for the shrinkage models are based on codes from (James et al., 2023)
+
+To replicate the tree-based models used in our variable selection, run the following program:
+-	Carbon_Leakage_Paper1_Tree.py
+-	Note that codes for the tree-based models are based on codes from (James et al., 2023)
 
 To replicate the DAG and accompanying refutation tests, run the following program:
 -	Carbon_Leakage_Paper1_DAG.py
