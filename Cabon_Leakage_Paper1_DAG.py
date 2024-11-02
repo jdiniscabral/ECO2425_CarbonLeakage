@@ -264,6 +264,8 @@ identified_estimand=estimand,
 method_name='backdoor.linear_regression')
 print(estimate_notax) 
 
+## Refutation tests to reproduce the table in the main paper
+
 #####
 # Refutation Test using subset
 #####
