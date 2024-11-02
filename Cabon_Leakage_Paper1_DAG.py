@@ -20,10 +20,11 @@ import os
 
 
 #change directory
-#os.chdir(r"")
+os.chdir(r"C:\Users\jcabr\OneDrive - University of Toronto\Coursework\ECO2425\Term_Project\Replication")
 
 #import the Aichele and Felbermayr replication data and the carbon tax policy data
 #use _withEU version to include EU ETS in the tax policies
+#use same file without "_withEU" suffix to produce the Table 6 results with ETS excluded
 AF_data = pd.read_stata("data\data\data_kyotoandleakage_restat.dta")
 CTAX_data = pd.read_excel(f"..\carbon_tax_countries_withEU.xlsx")
 
@@ -55,15 +56,22 @@ def create_dummy(row):
     else:
         return 0
 
-AF_data['dctax_K'] = AF_data.apply(create_dummy, axis=1)
+AF_data['dk_ctax'] = AF_data.apply(create_dummy, axis=1)
 
+#same variable but treatment variable = 1 or -1 only if the Kyoto country does NOT have carbon tax policy in place
+
+def create_dummy2(row):
+    if row['ctax_c'] == 0 and row['ckyoto'] == 1 and row['pkyoto'] == 0:
+        return 1
+    elif row['ctax_p'] == 0 and row['pkyoto'] == 1 and row['ckyoto'] == 0:
+        return -1
+    else:
+        return 0
+
+AF_data['dk_notax'] = AF_data.apply(create_dummy2, axis=1)
 
 # Define a list of the multilateral resistance variables
 mrterms = ["mrdis", "mrcon", "mrcom", "mrwto", "mrfta", "mreu"]
-
-#create a subset of the data without the carbon tax countries
-names_tax = ["FIN", "POL", "NOR", "SWE", "DNK", "SVN", "EST"]
-AF_data_notax = AF_data[-AF_data['ccode'].isin(names_tax)]
 
 #############
 # DAG Stuff #
@@ -80,19 +88,20 @@ import networkx as nx
 ##################################
 
 COLORS = [
-    '#00B0F0',
+    '#FFA500',
     '#FF0000'
 ]
 
 #Define the matrix
 matrix_w5 = np.array([
-#TO: Co2, DK, GDP, Cost, EU, MR
-    [0, 0, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0, 0],
-    [1, 1, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0, 0],
-    [1, 1, 0, 1, 0, 0],
-    [1, 0, 0, 0, 0, 0]    
+#TO: Co2, DK, GDP, Cost, EU, MR, Time
+    [0, 0, 0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 0],
+    [1, 1, 0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 0],
+    [1, 1, 0, 1, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 0],   
+    [1, 1, 0, 0, 0, 0, 0]        
 ])
 
 # Get the graphs
@@ -100,12 +109,13 @@ graph_exog = nx.from_numpy_array(matrix_w5, create_using=nx.DiGraph)
 
 # Define custom labels
 labels = {
-    0: "Emissions ij",
-    1: "Kyoto Ratification ij",
+    0: "Embodied CO2",
+    1: "Differential Kyoto Ratification",
     2: "GDP per Capita",
     3: "Bilateral Costs",
-    4: "EU Status ij",
-    5: "Multilateral Resistance"
+    4: "EU, WTO Status",
+    5: "Multilateral Resistance",
+    6: "Time"
 }
 
 
@@ -127,32 +137,100 @@ plt.show()
 # Test the DAG with data #
 ##########################
 
-#Define the matrix using nodes
+#NOTE: Multilateral resistance excluded to allow the refutation tests to run
+
+#Define the matrix for the baseline treatment variable for A and F (2015)
 gml_graph = """
 graph [
     directed 1
-    
+
     node [id "lbeim" label "lbeim"]    
     node [id "dk" label "dk"]
     node [id "lcy" label "lcy"]
     node [id "lpy" label "lpy"]
     node [id "ldist" label "ldist"]
+    node [id "comlang_ethno" label "Language"]
     node [id "eu" label "eu"]
+    node [id "wto" label "wto"]
     node [id "mrdis" label "mrdis"]
+    node [id "mreu" label "mreu"]
+    node [id "mrwto" label "mrwto"]
+    node [id "mrfta" label "mrfta"]
     
     edge [source "dk" target "lbeim"]
     edge [source "lcy" target "dk"]
     edge [source "lpy" target "dk"]  
-    edge [source "eu" target "dk"]     
+    edge [source "eu" target "dk"]  
+    edge [source "wto" target "dk"]  
+    
+    edge [source "eu" target "ldist"]  
+    edge [source "wto" target "ldist"]
+    edge [source "eu" target "comlang_ethno"]  
+    edge [source "wto" target "comlang_ethno"]
+
     edge [source "lcy" target "lbeim"]
     edge [source "lpy" target "lbeim"]
     edge [source "ldist" target "lbeim"]
-    edge [source "eu" target "lbeim"]   
-    edge [source "mrdis" target "lbeim"]
+    edge [source "eu" target "lbeim"]
+    edge [source "wto" target "lbeim"]
+    edge [source "comlang_ethno" target "lbeim"]
+
 ]
 """
 
+#Define the matrix for the notax treatment variable
+#Include the notax treatment variable
+
+gml_graph_notax = """
+graph [
+    directed 1
+
+    node [id "lbeim" label "lbeim"]   
+    node [id "dk_ctax" label "dk_ctax"]
+    node [id "dk_notax" label "dk_notax"]
+    node [id "lcy" label "lcy"]
+    node [id "lpy" label "lpy"]
+    node [id "ldist" label "ldist"]
+    node [id "contig" label "contig"]
+    node [id "comlang_ethno" label "Language"]
+    node [id "eu" label "eu"]
+    node [id "wto" label "wto"]
+    node [id "mrdis" label "mrdis"]
+    node [id "mreu" label "mreu"]
+    node [id "mrwto" label "mrwto"]
+    node [id "mrfta" label "mrfta"]
+    node [id "mrcom" label "mrcom"]
+    node [id "mrcon" label "mrcon"]
+
+    edge [source "dk_ctax" target "lbeim"]    
+    edge [source "dk_ctax" target "dk_notax"]    
+
+    edge [source "dk_notax" target "lbeim"]
+    edge [source "lcy" target "dk_notax"]
+    edge [source "lpy" target "dk_notax"]  
+    edge [source "eu" target "dk_notax"]  
+    edge [source "wto" target "dk_notax"]  
+    
+    edge [source "eu" target "contig"]  
+    edge [source "wto" target "contig"]
+    edge [source "eu" target "ldist"]  
+    edge [source "wto" target "ldist"]
+    edge [source "eu" target "comlang_ethno"]  
+    edge [source "wto" target "comlang_ethno"]
+
+    edge [source "lcy" target "lbeim"]
+    edge [source "lpy" target "lbeim"]
+    edge [source "ldist" target "lbeim"]
+    edge [source "eu" target "lbeim"]
+    edge [source "wto" target "lbeim"]
+    edge [source "contig" target "lbeim"]
+    edge [source "comlang_ethno" target "lbeim"]
+]
+"""
+
+
 # Graph the DAG that will be tested on the data
+# generate the model
 model = CausalModel(
     data=AF_data,
     treatment='dk',
@@ -161,56 +239,30 @@ model = CausalModel(
 )
 model.view_model()
 
-#identify the estimand. Should be backdoor
-estimand = model.identify_effect()
-print(estimand)
-
-#Main estimation
-estimate = model.estimate_effect(
-identified_estimand=estimand,
-method_name='backdoor.linear_regression')
-
-#####
-# Refutation Test using subset
-#####
-refute_subset = model.refute_estimate(
-estimand=estimand,
-estimate=estimate,
-method_name="data_subset_refuter",
-subset_fraction=0.4)
-
-print(f'Estimate of causal effect (linear regression): {estimate.value}')
-print(refute_subset)
-
-#####
-# Refutation Test using placebo treatment
-#####
-placebo_refuter = model.refute_estimate(
-    estimand=estimand, 
-    estimate=estimate,
-    method_name='placebo_treatment_refuter'
-)
-print(placebo_refuter)
-
-##########Same excercise for no carbon tax subsample
-
-# Graph the DAG that will be tested on the data. Use the subset with no carbon tax countries
-model = CausalModel(
-    data=AF_data_notax,
-    treatment='dk',
+model_notax = CausalModel(
+    data=AF_data,
+    treatment='dk_notax',
     outcome='lbeim',
-    graph=gml_graph
+    graph=gml_graph_notax
 )
-model.view_model()
+model_notax.view_model()
+
 
 #identify the estimand. Should be backdoor
 estimand = model.identify_effect()
 print(estimand)
 
-#Main estimation
+
+#Main estimations
 estimate = model.estimate_effect(
 identified_estimand=estimand,
 method_name='backdoor.linear_regression')
+print(estimate) 
+
+estimate_notax = model_notax.estimate_effect(
+identified_estimand=estimand,
+method_name='backdoor.linear_regression')
+print(estimate_notax) 
 
 #####
 # Refutation Test using subset
@@ -218,6 +270,15 @@ method_name='backdoor.linear_regression')
 refute_subset = model.refute_estimate(
 estimand=estimand,
 estimate=estimate,
+method_name="data_subset_refuter",
+subset_fraction=0.4)
+
+print(f'Estimate of causal effect (linear regression): {estimate.value}')
+print(refute_subset)
+
+refute_subset = model_notax.refute_estimate(
+estimand=estimand,
+estimate=estimate_notax,
 method_name="data_subset_refuter",
 subset_fraction=0.4)
 
@@ -233,3 +294,11 @@ placebo_refuter = model.refute_estimate(
     method_name='placebo_treatment_refuter'
 )
 print(placebo_refuter)
+
+placebo_refuter = model_notax.refute_estimate(
+    estimand=estimand, 
+    estimate=estimate_notax,
+    method_name='placebo_treatment_refuter'
+)
+print(placebo_refuter)
+

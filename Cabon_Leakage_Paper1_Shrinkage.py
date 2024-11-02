@@ -20,10 +20,11 @@ import os
 
 
 #change directory
-#os.chdir(r"")
+os.chdir(r"C:\Users\jcabr\OneDrive - University of Toronto\Coursework\ECO2425\Term_Project\Replication")
 
 #import the Aichele and Felbermayr replication data and the carbon tax policy data
 #use _withEU version to include EU ETS in the tax policies
+#use same file without "_withEU" suffix to produce the Table 6 results with ETS excluded
 AF_data = pd.read_stata("data\data\data_kyotoandleakage_restat.dta")
 CTAX_data = pd.read_excel(f"..\carbon_tax_countries_withEU.xlsx")
 
@@ -55,15 +56,23 @@ def create_dummy(row):
     else:
         return 0
 
-AF_data['dctax_K'] = AF_data.apply(create_dummy, axis=1)
+AF_data['dk_ctax'] = AF_data.apply(create_dummy, axis=1)
 
+#same variable but treatment variable = 1 or -1 only if the Kyoto country does NOT have carbon tax policy in place
+
+def create_dummy2(row):
+    if row['ctax_c'] == 0 and row['ckyoto'] == 1 and row['pkyoto'] == 0:
+        return 1
+    elif row['ctax_p'] == 0 and row['pkyoto'] == 1 and row['ckyoto'] == 0:
+        return -1
+    else:
+        return 0
+
+AF_data['dk_notax'] = AF_data.apply(create_dummy2, axis=1)
 
 # Define a list of the multilateral resistance variables
 mrterms = ["mrdis", "mrcon", "mrcom", "mrwto", "mrfta", "mreu"]
 
-#create a subset of the data without the carbon tax countries
-names_tax = ["FIN", "POL", "NOR", "SWE", "DNK", "SVN", "EST"]
-AF_data_notax = AF_data[-AF_data['ccode'].isin(names_tax)]
 
 ##########################################
 ########## Run LASSO and Ridge ###########
@@ -79,7 +88,8 @@ from sklearn.preprocessing import StandardScaler
 #exclude the treatment variable, add in additional variables that we had not considered previously
 Y = AF_data[['lbeim']]
 X_df = AF_data[['lcy', 'lpy', 'ldist', 'contig', 'comlang_ethno', 'colony', 'trans', 'fta', 'wto', 'eu'] + mrterms] 
-
+custom_labels = ['GDP M', 'GDP X', 'Distance', 'Contiguous', 'Language', 'Colony', 'Transition', 'FTA', 'WTO', 'EU',     
+            'MR Distance', 'MR Contiguous', 'MR Language', 'MR WTO', 'MR FTA', 'MR EU'] 
 #make into numpy arrays
 X = np.array(X_df)
 Y = np.array(Y)
@@ -99,7 +109,7 @@ kfold = skm.KFold(K, random_state=0, shuffle=True)
 ### RIDGE REGRESSION ###
 ########################
 
-#####RIDGE COEFFICIENTS
+#####RIDGE COEFFICIENTS (reproduces the Ridge plot from the appendix)
 #run estimates for different estimates
 #set L1 ratio = 0, meaning we use ridge regression
 soln_array = skl.ElasticNet.path(Xs, Y, l1_ratio=0., alphas=lambdas)[1]
@@ -119,7 +129,9 @@ path_fig, ax = subplots(figsize=(8,8))
 soln_path.plot(ax=ax, legend=False)
 ax.set_xlabel('$-\log(\lambda)$', fontsize=20)
 ax.set_ylabel('Standardized coefficients', fontsize=20)
-ax.legend(loc='lower left');
+ax.legend(custom_labels, loc='lower right');
+
+
 
 #####RIDGE CV
 ridge = skl.ElasticNet(alpha=lambdas[59], l1_ratio=0)
@@ -137,7 +149,7 @@ grid.fit(X, Y)
 grid.best_params_['ridge__alpha']
 grid.best_estimator_
 
-#Cross-Validation plot
+#Cross-Validation plot (Not used in the text)
 ridge_fig, ax = subplots(figsize=(8,8))
 ax.errorbar(-np.log(lambdas),
             -grid.cv_results_['mean_test_score'],
@@ -148,6 +160,7 @@ ax.set_ylabel('Cross-validated MSE', fontsize=20);
 #############
 ### LASSO ###
 #############
+#Reproduces the LASSO figures from the main text
 
 #####LASSO COEFFICIENTS
 lambdas, soln_array = skl.Lasso.path(Xs, Y, l1_ratio=1, n_alphas=100)[:2]
@@ -165,7 +178,7 @@ path_fig, ax = subplots(figsize=(8,8))
 soln_path.plot(ax=ax, legend=False)
 ax.set_xlabel('$-\log(\lambda)$', fontsize=20)
 ax.set_ylabel('Standardized coefficients', fontsize=20)
-ax.legend(loc='lower left');
+ax.legend(custom_labels, loc='lower left');
 
 #####LASSO CV
 lassoCV = skl.ElasticNetCV(n_alphas=100,

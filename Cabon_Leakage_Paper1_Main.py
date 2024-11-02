@@ -20,12 +20,13 @@ import os
 
 
 #change directory
-#os.chdir(r"")
+os.chdir(r"C:\Users\jcabr\OneDrive - University of Toronto\Coursework\ECO2425\Term_Project\Replication")
 
 #import the Aichele and Felbermayr replication data and the carbon tax policy data
 #use _withEU version to include EU ETS in the tax policies
+#use same file without "_withEU" suffix to produce the Table 6 results with ETS excluded
 AF_data = pd.read_stata("data\data\data_kyotoandleakage_restat.dta")
-CTAX_data = pd.read_excel(f"..\carbon_tax_countries_withEU.xlsx")
+CTAX_data = pd.read_excel(f"..\carbon_tax_countries.xlsx")
 
 #merge carbon tax countries with AF_data and create the indicator variable
 #must be done once for importers and once for exporters
@@ -55,33 +56,41 @@ def create_dummy(row):
     else:
         return 0
 
-AF_data['dctax_K'] = AF_data.apply(create_dummy, axis=1)
+AF_data['dk_ctax'] = AF_data.apply(create_dummy, axis=1)
 
+#same variable but treatment variable = 1 or -1 only if the Kyoto country does NOT have carbon tax policy in place
+
+def create_dummy2(row):
+    if row['ctax_c'] == 0 and row['ckyoto'] == 1 and row['pkyoto'] == 0:
+        return 1
+    elif row['ctax_p'] == 0 and row['pkyoto'] == 1 and row['ckyoto'] == 0:
+        return -1
+    else:
+        return 0
+
+AF_data['dk_notax'] = AF_data.apply(create_dummy2, axis=1)
 
 # Define a list of the multilateral resistance variables
 mrterms = ["mrdis", "mrcon", "mrcom", "mrwto", "mrfta", "mreu"]
 
-#create a subset of the data without the carbon tax countries
-names_tax = ["FIN", "POL", "NOR", "SWE", "DNK", "SVN", "EST"]
-AF_data_notax = AF_data[-AF_data['ccode'].isin(names_tax)]
 
 ###############################
 # Generate Summary Statistics #
 ###############################
 
-AF_data_sum = AF_data[['lbeim', 'lcy', 'trans', 'wto', 'fta', 'eu', 'dk', 'dctax_K']]
+#subset of the data for summary statistics
+AF_data_sum = AF_data[['lbeim', 'lcy', 'wto', 'fta', 'eu', 'dk', 'ctax_p']]
 summary_stats = AF_data_sum.describe()
 
 # Add variable labels
 variable_labels = {
     'lbeim': 'Emiss. in Imports',
     'lcy': 'Log GDP Per Capita',
-    'trans': 'Transition',
     'fta': 'FTA',
     'eu': 'EU',
     'wto': 'WTO',
     'dk': 'Kyoto',
-    'dctax_K': 'Kyoto (CPrice)'
+    'ctax_p': 'Carbon Pricing',
 }
 
 # Rename the columns of summary_stats
@@ -92,27 +101,99 @@ latex_output = summary_stats.to_latex(float_format="%.2f",
                                        label='tab:summary_stats',
                                        caption='Summary Statistics for Selected Variables')
 # Print the LaTeX output
-#print(latex_output)
+print(latex_output)
 del(AF_data_sum)
+
+#####################################
+# Plots for data and identification #
+#####################################
+#NOTE: Using BEIM  as oppose to the log version (lbeim) we use in the paper as the dependent variable
+#NOTE: This takes a long time to run
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+AF_data_plot = AF_data
+
+#identify country-pairings where dk was equal to 1 or -1 at some point
+#create the three flags to identify the countries belonging to each group
+AF_data_plot['dk_flag'] = AF_data_plot['sid'].apply(
+    lambda x: 'Treated (DK=1)' if (AF_data_plot[AF_data_plot['sid'] == x]['dk'] == 1).any() 
+    else ('Treated (DK=-1)' if (AF_data_plot[AF_data_plot['sid'] == x]['dk'] == -1).any() 
+    else 'Non-treated (DK=0)')
+)
+
+# Create the average by year and dk_flag
+average_by_year = AF_data_plot.groupby(['year', 'dk_flag'])['BEIM'].mean().reset_index()
+
+
+# Create the plot
+sns.set(style="whitegrid")
+plt.figure(figsize=(10, 6))
+sns.lineplot(data=average_by_year, x='year', y='BEIM', hue='dk_flag', marker='o', estimator=None)
+plt.axvline(x=2002, linestyle='--', color='red', label='Beginning of Kyoto Ratification')
+
+# Add labels and title
+plt.xlabel('Year')
+plt.ylabel('Average Bilateral Emissions Embodied in Imports (Tones)')
+plt.xticks(rotation=45)
+plt.legend(title='DK Treatment Status')
+plt.grid()
+plt.show()
+
+############################################################
+# Emissions Trends for Carbon Pricing vs no Carbon Pricing #
+############################################################
+
+#first, subset the data to only have treated observations with DK = 1
+#next, identify obsrevations with tax and observations with no tax
+AF_data_plot = AF_data[AF_data['dk']==1]
+AF_data_plot['dk_flag'] = AF_data_plot['sid'].apply(
+    lambda x: 'With Carbon Pricing (DK = 1, T = 1)' if (AF_data_plot[AF_data_plot['sid'] == x]['dk_ctax'] == 1).any() 
+    else ('No Carbon Pricing (DK = 1, T = 0)'))
+
+# Create the average by year and dk_flag
+average_by_year = AF_data_plot.groupby(['year', 'dk_flag'])['BEIM'].mean().reset_index()
+
+
+# Create the plot
+sns.set(style="whitegrid")
+plt.figure(figsize=(11, 7))
+sns.lineplot(data=average_by_year, x='year', y='BEIM', hue='dk_flag', marker='o', estimator=None)
+
+# Add labels and title
+plt.xlabel('Year')
+plt.ylabel('Average Bilateral Emissions Embodied in Imports (Tones)')
+plt.xticks()
+plt.legend(title='DK Treatment Status')
+plt.grid()
+plt.show()
+
+
+##################################
+# Regression Results for Table 4 #
+##################################
 
 ###############################
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
 from linearmodels.panel import PanelOLS
-
-#This code reproduces the main regression results in Table 3
+from stargazer.stargazer import Stargazer
 
 #FOR Y VARIABLE
 #lbeim for carbon embodied in exports
 #limp for imports
 #lint for intensity 
 
+#to store resuls and create Stargazer tables
+results = []
+
 ################
 ### BASELINE ###
 ################
 
 #####
-###Kyoto Treatment with full sample
+###Kyoto Treatment
 Y = AF_data[['lbeim']]
 X_obs = AF_data[['dk', 'ldist', 'lcy', 'lpy', 'contig', 'comlang_ethno', 'fta', 'wto', 'eu'] 
                 + mrterms + [col for col in AF_data.columns if col.startswith('ttt') and col != 'tttyear_1995']]
@@ -122,45 +203,33 @@ X_obs = sm.add_constant(X_obs)
 
 # Fit the model
 model = sm.OLS(Y, X_obs)
-results_obs = model.fit(cov_type='HC1')
+results_baseline_dk = model.fit(cov_type='HC1')
 
 #print the output. dk is variable of interest
-print(results_obs.summary())
+print(results_baseline_dk.summary())
+results.append(results_baseline_dk)
+
 
 #####
-###Carbon Pricing Treatment with full sample
-X_obs = AF_data[['dctax_K', 'ldist', 'lcy', 'lpy', 'contig', 'comlang_ethno', 'fta', 'wto', 'eu'] 
+###Carbon Pricing Treatment
+X_obs = AF_data[['dk_ctax', 'dk_notax', 'ldist', 'lcy', 'lpy', 'contig', 'comlang_ethno', 'fta', 'wto', 'eu'] 
                 + mrterms + [col for col in AF_data.columns if col.startswith('ttt') and col != 'tttyear_1995']]
 
 X_obs = sm.add_constant(X_obs)
 
 model = sm.OLS(Y, X_obs)
-results_obs = model.fit(cov_type='HC1')
+results_baseline_tax = model.fit(cov_type='HC1')
 
 #print the output. dctax_K is variable of interest
-print(results_obs.summary())
-
-#####
-###Kyoto Treatment with carbon tax countries removed
-
-Y = AF_data_notax[['lbeim']]
-X_obs = AF_data_notax[['dk', 'ldist', 'lcy', 'lpy', 'contig', 'comlang_ethno', 'fta', 'wto', 'eu'] 
-                + mrterms + [col for col in AF_data.columns if col.startswith('ttt') and col != 'tttyear_1995']]
-
-X_obs = sm.add_constant(X_obs)
-
-model_notax = sm.OLS(Y, X_obs)
-results_obs = model_notax.fit(cov_type='HC1')
-
-#print the output. dk is the outcome variable of interest
-print(results_obs.summary())
+print(results_baseline_tax.summary())
+results.append(results_baseline_tax)
 
 ##########################
 ### ML VARIABLE SELECT ###
 ##########################
 
 #####
-###Kyoto Treatment with full sample
+###Kyoto Treatment
 Y = AF_data[['lbeim']]
 X_varsel = AF_data[['dk', 'lcy', 'lpy', 'ldist', 'contig', 'comlang_ethno', 'colony', 'trans',  
                 "mrcon", "mrcom", "mrwto", "mrfta", "mreu", "mrdis"] + 
@@ -169,41 +238,27 @@ X_varsel = AF_data[['dk', 'lcy', 'lpy', 'ldist', 'contig', 'comlang_ethno', 'col
 X_varsel = sm.add_constant(X_varsel)
 
 model_varsel = sm.OLS(Y, X_varsel)
-results_varsel = model_varsel.fit(cov_type='HC1')
+results_varsel_dk = model_varsel.fit(cov_type='HC1')
 
 #print the output. dk is variable of interest
-print(results_varsel.summary())
+print(results_varsel_dk.summary())
+results.append(results_varsel_dk)
 
 #####
-###Carbon Pricing Treatment with full sample
-X_varsel = AF_data[['dctax_K', 'lcy', 'lpy', 'ldist', 'contig', 'comlang_ethno', 'colony', 'trans',  
+###Carbon Pricing Treatment
+X_varsel = AF_data[['dk_ctax', 'dk_notax', 'lcy', 'lpy', 'ldist', 'contig', 'comlang_ethno', 'colony', 'trans',  
                 "mrcon", "mrcom", "mrwto", "mrfta", "mreu", "mrdis"] + 
                [col for col in AF_data.columns if col.startswith('ttt') and col != 'tttyear_1995']]
 
 X_varsel = sm.add_constant(X_varsel)
 
 model_varsel = sm.OLS(Y, X_varsel)
-results_varsel = model_varsel.fit(cov_type='HC1')
+results_varsel_tax = model_varsel.fit(cov_type='HC1')
 
 #print the output. dctax_K is variable of interest
-print(results_varsel.summary())
+print(results_varsel_tax.summary())
+results.append(results_varsel_tax)
 
-#####
-###Kyoto Treatment with carbon tax countries removed
-
-Y = AF_data_notax[['lbeim']]
-X_varsel_notax = AF_data_notax[['dk', 'lcy', 'lpy', 'ldist', 'contig', 'comlang_ethno', 'colony', 'trans',  
-                "mrcon", "mrcom", "mrwto", "mrfta", "mreu", "mrdis"] + 
-               [col for col in AF_data.columns if col.startswith('ttt') and col != 'tttyear_1995']]
-
-X_varsel_notax = sm.add_constant(X_varsel_notax)
-
-# Fit the model with observables
-model_varsel_notax = sm.OLS(Y, X_varsel_notax)
-results_varsel_notax = model_varsel_notax.fit(cov_type='HC1')
-
-#print the output. dk is variable of interest
-print(results_varsel_notax.summary())
 
 #####################
 ### FIXED EFFECTS ###
@@ -215,7 +270,7 @@ AF_data_FE['year_int'] = AF_data_FE['year'].astype(int)
 AF_data_FE.set_index(['year_int', 'sid'], inplace=True)
 
 #####
-###Kyoto Treatment with full sample
+###Kyoto Treatment
 Y = AF_data_FE['lbeim']
 X = AF_data_FE[['dk', 'lcy', 'lpy', 'fta', 'wto', 'eu'] + mrterms]
 
@@ -223,38 +278,132 @@ X = sm.add_constant(X)
 
 # Fit the fixed effects model. Entity effects includes effects by sid (country pairing-industry FE)
 model = PanelOLS(Y, X, entity_effects=True)
-results = model.fit(cov_type='clustered', cluster_time=True)  # Clustered standard errors
+results_fe_dk = model.fit(cov_type='clustered')  
 
 #print the output. dk is variable of interest
-print(results.summary)
+print(results_fe_dk.summary)
+results.append(results_fe_dk)
 
 #####
-###Carbon Pricing Treatment with full sample
-X = AF_data_FE[['dctax_K',  'lcy', 'lpy', 'fta', 'wto', 'eu'] + mrterms]
+###Carbon Pricing Treatment
+X = AF_data_FE[['dk_ctax', 'dk_notax',  'lcy', 'lpy', 'fta', 'wto', 'eu'] + mrterms]
 X = sm.add_constant(X)
 
 model = PanelOLS(Y, X, entity_effects=True)
-results = model.fit(cov_type='clustered', cluster_time=True)  # Clustered standard errors
+results_fe_tax = model.fit(cov_type='clustered') 
 
 #print the output. dctax_K is variable of interest
-print(results.summary)
+print(results_fe_tax.summary)
+results.append(results_fe_tax)
+
+
+############################
+# Create the Output Tables #
+############################
+
+stargazer = Stargazer([results_baseline_dk, results_baseline_tax, 
+                       results_varsel_dk, results_varsel_tax,
+                       results_fe_dk, results_fe_tax])
+
+# Customize the output
+stargazer.title('Regression Results for Fixed Effects Model')
+stargazer.rename_covariates({'dk': '$DK_{mxt}$', 'dk_ctax': '$DKT_{mxt}$',
+                             'dk_notax': '$DKNT_{mxt}$',
+                             'ldist': 'Distance', 'lcy': 'Country Y',
+                              'lpy': 'Country Y Price', 'contig': 'Contiguous', 
+                              'comlang_ethno': 'Common Language/Ethnicity',
+                              'fta': 'Free Trade Agreement', 'wto': 'WTO Membership',
+                              'eu': 'EU Membership'})
+
+# Report only the treatment variables
+to_report = ['dk', 'dk_ctax', 'dk_notax'] 
+stargazer.covariate_order(to_report)
+
+# Output the results to LaTeX
+latex_output = stargazer.render_latex()
+print(latex_output)
+
+
+################################
+# Subcomponent Results Table 5 #
+################################
+#Use the fixed effects specification but change the dependent variables
+
+results2 = []
+
+#############Import Volume
 
 #####
-###Kyoto Treatment with carbon tax countries removed
-
-#prepare the data and set the time and panel dimensions
-AF_data_notax_FE = AF_data_notax
-AF_data_notax_FE['year'] = AF_data_notax_FE['year'].astype(int)
-AF_data_notax_FE.set_index(['year', 'sid'], inplace=True)
-
-Y = AF_data_notax_FE['lbeim']
-X = AF_data_notax_FE[['dk', 'lcy', 'lpy', 'fta', 'wto', 'eu'] + mrterms]
+###Kyoto Treatment 
+Y = AF_data_FE['limp']
+X = AF_data_FE[['dk', 'lcy', 'lpy', 'fta', 'wto', 'eu'] + mrterms]
 
 X = sm.add_constant(X)
 
-model_notax = PanelOLS(Y, X, entity_effects=False)
-results_notax = model_notax.fit(cov_type='clustered', cluster_time=True)  # Clustered standard errors
+# Fit the fixed effects model. Entity effects includes effects by sid (country pairing-industry FE)
+model = PanelOLS(Y, X, entity_effects=True)
+results_fe_dk = model.fit(cov_type='clustered', cluster_time=True)  
 
 #print the output. dk is variable of interest
-print(results_notax.summary)
+print(results_fe_dk.summary)
+results2.append(results_fe_dk)
 
+#####
+###Carbon Pricing Treatment 
+Y = AF_data_FE['limp']
+X = AF_data_FE[['dk_ctax', 'dk_notax', 'lcy', 'lpy', 'fta', 'wto', 'eu'] + mrterms]
+
+X = sm.add_constant(X)
+
+# Fit the fixed effects model. Entity effects includes effects by sid (country pairing-industry FE)
+model = PanelOLS(Y, X, entity_effects=True)
+results_fe_dk = model.fit(cov_type='clustered') 
+
+#print the output. dk is variable of interest
+print(results_fe_dk.summary)
+results2.append(results_fe_dk)
+
+#############Emissions Intensity
+
+#####
+###Kyoto Treatment 
+Y = AF_data_FE['lint']
+X = AF_data_FE[['dk', 'lcy', 'lpy', 'fta', 'wto', 'eu'] + mrterms]
+
+X = sm.add_constant(X)
+
+# Fit the fixed effects model. Entity effects includes effects by sid (country pairing-industry FE)
+model = PanelOLS(Y, X, entity_effects=True)
+results_fe_dk = model.fit(cov_type='clustered') 
+
+#print the output. dk is variable of interest
+print(results_fe_dk.summary)
+results2.append(results_fe_dk)
+
+#####
+###Carbon Pricing Treatment 
+Y = AF_data_FE['lint']
+X = AF_data_FE[['dk_ctax', 'dk_notax', 'lcy', 'lpy', 'fta', 'wto', 'eu'] + mrterms]
+
+X = sm.add_constant(X)
+
+# Fit the fixed effects model. Entity effects includes effects by sid (country pairing-industry FE)
+model = PanelOLS(Y, X, entity_effects=True)
+results_fe_dk = model.fit(cov_type='clustered')  # Clustered standard errors
+
+#print the output. dk is variable of interest
+print(results_fe_dk.summary)
+results2.append(results_fe_dk)
+
+#########
+#Create the output Tables
+#########
+
+stargazer = Stargazer(results2)
+
+to_report = ['dk', 'dk_ctax', 'dk_notax'] 
+stargazer.covariate_order(to_report)
+
+# Output the results to LaTeX
+latex_output = stargazer.render_latex()
+print(latex_output)

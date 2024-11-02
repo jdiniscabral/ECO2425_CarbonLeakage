@@ -20,10 +20,11 @@ import os
 
 
 #change directory
-#os.chdir(r"")
+os.chdir(r"C:\Users\jcabr\OneDrive - University of Toronto\Coursework\ECO2425\Term_Project\Replication")
 
 #import the Aichele and Felbermayr replication data and the carbon tax policy data
 #use _withEU version to include EU ETS in the tax policies
+#use same file without "_withEU" suffix to produce the Table 6 results with ETS excluded
 AF_data = pd.read_stata("data\data\data_kyotoandleakage_restat.dta")
 CTAX_data = pd.read_excel(f"..\carbon_tax_countries_withEU.xlsx")
 
@@ -55,15 +56,23 @@ def create_dummy(row):
     else:
         return 0
 
-AF_data['dctax_K'] = AF_data.apply(create_dummy, axis=1)
+AF_data['dk_ctax'] = AF_data.apply(create_dummy, axis=1)
 
+#same variable but treatment variable = 1 or -1 only if the Kyoto country does NOT have carbon tax policy in place
+
+def create_dummy2(row):
+    if row['ctax_c'] == 0 and row['ckyoto'] == 1 and row['pkyoto'] == 0:
+        return 1
+    elif row['ctax_p'] == 0 and row['pkyoto'] == 1 and row['ckyoto'] == 0:
+        return -1
+    else:
+        return 0
+
+AF_data['dk_notax'] = AF_data.apply(create_dummy2, axis=1)
 
 # Define a list of the multilateral resistance variables
 mrterms = ["mrdis", "mrcon", "mrcom", "mrwto", "mrfta", "mreu"]
 
-#create a subset of the data without the carbon tax countries
-names_tax = ["FIN", "POL", "NOR", "SWE", "DNK", "SVN", "EST"]
-AF_data_notax = AF_data[-AF_data['ccode'].isin(names_tax)]
 
 #############################################
 ########## Run Tree-Based Methods ###########
@@ -80,7 +89,7 @@ from sklearn.ensemble import (RandomForestRegressor as RF, GradientBoostingRegre
 #lint for intensity
 
 #set up the X and Y matrices with the full set of variables we consider for variables selection
-Y_df = AF_data['lbeim']
+Y_df = AF_data['limp']
 X_df = AF_data[['dk', 'lcy', 'lpy', 'ldist', 'contig', 'comlang_ethno', 'colony', 'trans', 'fta', 'wto', 'eu'] + mrterms] 
 
 feature_names = list(['Difference in Kyoto', 'Importer GDP', 'Exporter GDP', 'Distance', 
@@ -94,6 +103,8 @@ Y = np.array(Y_df, dtype=np.float32)
 #####
 ###Simple Regression Tree
 #####
+#Run with lbeim as dependent variable for Regression Tree in the Main Text
+# Run with lint (trade) or lint (intensity) to produce the appendix figures
 
 #split the data into test and train 20% test data
 (X_train, X_test, y_train, y_test) = skm.train_test_split(X, Y, test_size=0.2, random_state=0)
@@ -104,7 +115,7 @@ reg.fit(X_train, y_train)
 ax = subplots(figsize=(12,12))[1]
 plot_tree(reg,feature_names=feature_names, ax=ax);                                
  
-#make a grid of cost complexity pruning alpha values
+#make a grid of alpha values for pruning
 #use 5-fold cross-validation to get the optimal alpha                                
 ccp_path = reg.cost_complexity_pruning_path(X_train, y_train)
 kfold = skm.KFold(5,
@@ -125,8 +136,9 @@ MSE_regtree = np.mean(sq_errors)
 RMSE_regtree = math.sqrt(MSE_regtree)
 
 #plot the tree on the test data using the best alpha
-ax = subplots(figsize=(20,20))[1]
-plot = plot_tree(G.best_estimator_, feature_names=feature_names, ax=ax);
+ax = subplots(figsize=(20,16))[1]
+plot = plot_tree(best_, feature_names=feature_names, ax=ax, impurity=False, 
+                 precision=2, fontsize=15, rounded=True)
 
 #####
 ###Bagging 
