@@ -20,7 +20,7 @@ import os
 
 
 #change directory
-os.chdir(r"C:\Users\jcabr\OneDrive - University of Toronto\Coursework\ECO2425\Term_Project\Replication")
+os.chdir(r"")
 
 #import the Aichele and Felbermayr replication data and the carbon tax policy data
 #use _withEU version to include EU ETS in the tax policies
