@@ -37,10 +37,10 @@ References for Code:
 Aichele, R. and G. Felbermayr (2015): “Kyoto and Carbon Leakage: An Empirical Analysis of the Carbon Content of Bilateral Trade,” The Review of Economics and Statistics, 97, 104–115.
 
 Battocchi, K., Dillon, E., Hei, M., Lewis, G., Oka, P., Oprescu, M., Syrgkanis, V. “EconML: A Python Package for ML-Based Heterogeneous Treatment Effects Estimation,”. Available under “Notebooks” at: https://github.com/py-why/EconML
-Facure, M. (2022).
 
-Causal Inference for the Brave and True. Available at: https://matheusfacure. github.io/python-
-causality-handbook/landing-page.html.
+Facure, M. (2022).
+Causal Inference for the Brave and True. Available at: https://matheusfacure.github.io/python-causality-handbook/landing-page.html.
 
 James, G. M., D. Witten, T. Hastie, R. Tibshirani, and J. Taylor (2023): An Introduction to Statistical Learning: with Applications in Python, Springer.
+
 Molak, A. (2023): Causal Inference and Discovery in Python: Unlock the secrets of modern causal machine learning with DoWhy, EconML, PyTorch and more, Packt Publishing Ltd
