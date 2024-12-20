@@ -37,7 +37,7 @@ To replicate the meta-learner results, run the following program:
 To replicate the double ML and Causal forest results, run the following program:
 07_DoubleML_CausalForest.py
 -	Note that codes used to produce the double ML estimates were based on notebooks from Causal Inference for the Brave and True. Causal forests were implemented based on EconML notebooks.
--	Produces Table 8, Figure 8
+-	Produces Table 8, Figure 8 and estimates included in Figure 9
 
 References for Code:
 
